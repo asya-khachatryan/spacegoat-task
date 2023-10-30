@@ -1,16 +1,14 @@
 package com.spacegoat.task.controller;
 
-import com.spacegoat.task.domain.Transaction;
-import com.spacegoat.task.dto.FundsDto;
-import com.spacegoat.task.dto.TransactionResponseDto;
-import com.spacegoat.task.dto.TransferDto;
+import com.spacegoat.task.dto.*;
 import com.spacegoat.task.service.UserAccountService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@RestController("/users")
+@RestController
+@RequestMapping("/users")
 public class UserAccountServiceController {
     private final UserAccountService service;
 
@@ -34,8 +32,12 @@ public class UserAccountServiceController {
     }
 
     @GetMapping("/transactions/{id}")
-    public ResponseEntity<List<Transaction>> getAllTransactionsForUserId(@PathVariable Long id) {
+    public ResponseEntity<List<TransactionResponseDto>> getAllTransactionsForUserId(@PathVariable Long id) {
         return ResponseEntity.ok(service.getAllTransactionsForUserId(id));
     }
 
+    @PostMapping
+    public ResponseEntity<UserResponseDto> createUser(@RequestBody UserRequestDto dto) {
+        return ResponseEntity.ok(service.createUser(dto));
+    }
 }

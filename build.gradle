@@ -15,20 +15,24 @@ repositories {
     mavenCentral()
 }
 
+sourceSets {
+    main.java.srcDirs += "build/generated/sources/annotationProcessor/java/main"
+}
+
 dependencies {
     implementation group: 'org.springframework', name: 'spring-web', version: '6.0.13'
     implementation group: 'org.springframework.boot', name: 'spring-boot-starter-web', version: '3.1.4'
+    implementation group: 'org.springframework.boot', name: 'spring-boot-starter-data-jpa', version: '3.1.4'
+    implementation group: 'org.springframework.boot', name: 'spring-boot-starter-validation', version: '3.1.4'
     implementation 'org.springframework.boot:spring-boot-starter-jdbc:3.1.4'
-    implementation group: 'org.postgresql', name: 'postgresql', version: '42.6.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test:3.1.4'
+    implementation group: 'org.postgresql', name: 'postgresql', version: '42.6.0'
     runtimeOnly 'org.postgresql:postgresql'
     compileOnly group: 'org.projectlombok', name: 'lombok', version: '1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
     implementation group: 'org.mapstruct', name: 'mapstruct', version: '1.5.5.Final'
     implementation group: 'org.mapstruct', name: 'mapstruct-processor', version: '1.5.5.Final'
-    // https://mvnrepository.com/artifact/org.projectlombok/lombok-mapstruct-binding
     implementation group: 'org.projectlombok', name: 'lombok-mapstruct-binding', version: '0.2.0'
-
 }
 
 tasks.named('test') {
