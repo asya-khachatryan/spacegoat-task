@@ -1,4 +1,4 @@
-package com.spacegoat.task;
+package am.spacegoat.task;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
