@@ -10,7 +10,7 @@ import java.util.List;
 
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
-    @Query("SELECT t FROM Transaction t WHERE t.senderUser.id = :senderId")
+    @Query("SELECT t FROM Transaction t WHERE t.senderUserEntity.id = :senderId")
     List<Transaction> findBySenderUserId(@Param("senderId") long senderId);
 
 

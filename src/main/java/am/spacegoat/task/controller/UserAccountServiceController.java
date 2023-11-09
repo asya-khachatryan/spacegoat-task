@@ -38,7 +38,7 @@ public class UserAccountServiceController {
 
     @PostMapping("/transfer/")
     public void transferFunds(@RequestBody TransferDto dto) {
-        service.transfer(dto.getSenderId(), dto.getReceiverId(), dto.getAmount());
+        service.transferRepeatableRead(dto.getSenderId(), dto.getReceiverId(), dto.getAmount());
     }
 
     @GetMapping("/transactions/{id}")

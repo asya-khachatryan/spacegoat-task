@@ -15,8 +15,8 @@ public class TransactionConverterImpl implements TransactionConverter {
         TransactionDto dto = new TransactionDto();
         dto.setId(transaction.getId());
         dto.setAmount(transaction.getAmount());
-        dto.setSenderUserId(transaction.getSenderUser().getId());
-        dto.setReceiverUserId(transaction.getReceiverUser().getId());
+        dto.setSenderUserId(transaction.getSenderUserEntity().getId());
+        dto.setReceiverUserId(transaction.getReceiverUserEntity().getId());
         dto.setCreationTime(transaction.getCreationTime());
         return dto;
     }

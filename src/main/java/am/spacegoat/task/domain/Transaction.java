@@ -23,11 +23,11 @@ public class Transaction {
 
     @ManyToOne
     @JoinColumn(name = "sender_user_id", nullable = false)
-    private User senderUser;
+    private UserEntity senderUserEntity;
 
     @ManyToOne
     @JoinColumn(name = "receiver_user_id", nullable = false)
-    private User receiverUser;
+    private UserEntity receiverUserEntity;
 
     @Column(name = "amount", nullable = false)
     private BigDecimal amount;
@@ -40,8 +40,8 @@ public class Transaction {
         TransactionDto dto = new TransactionDto();
         dto.setId(transaction.getId());
         dto.setAmount(transaction.getAmount());
-        dto.setSenderUserId(transaction.getSenderUser().getId());
-        dto.setReceiverUserId(transaction.getReceiverUser().getId());
+        dto.setSenderUserId(transaction.getSenderUserEntity().getId());
+        dto.setReceiverUserId(transaction.getReceiverUserEntity().getId());
         dto.setCreationTime(transaction.getCreationTime());
         return dto;
     }

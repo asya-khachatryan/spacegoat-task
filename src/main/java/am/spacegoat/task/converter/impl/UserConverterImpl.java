@@ -1,7 +1,7 @@
 package am.spacegoat.task.converter.impl;
 
 import am.spacegoat.task.converter.UserConverter;
-import am.spacegoat.task.domain.User;
+import am.spacegoat.task.domain.UserEntity;
 import am.spacegoat.task.dto.UserDto;
 import org.springframework.stereotype.Component;
 
@@ -9,25 +9,25 @@ import org.springframework.stereotype.Component;
 public class UserConverterImpl implements UserConverter {
 
     @Override
-    public UserDto convertEntityToResponseDto(User user) {
+    public UserDto convertEntityToResponseDto(UserEntity userEntity) {
         UserDto responseDto = new UserDto();
-        responseDto.setFirstName(user.getFirstName());
-        responseDto.setLastName(user.getLastName());
-        responseDto.setUsername(user.getUsername());
-        responseDto.setCity(user.getCity());
-        responseDto.setBalance(user.getBalance());
-        responseDto.setId(user.getId());
+        responseDto.setFirstName(userEntity.getFirstName());
+        responseDto.setLastName(userEntity.getLastName());
+        responseDto.setUsername(userEntity.getUsername());
+        responseDto.setCity(userEntity.getCity());
+        responseDto.setBalance(userEntity.getBalance());
+        responseDto.setId(userEntity.getId());
         return responseDto;
     }
 
     @Override
-    public User convertRequestDtoToEntity(UserDto dto) {
-        User user = new User();
-        user.setFirstName(dto.getFirstName());
-        user.setLastName(dto.getLastName());
-        user.setUsername(dto.getUsername());
-        user.setCity(dto.getCity());
-        user.setBalance(dto.getBalance());
-        return user;
+    public UserEntity convertRequestDtoToEntity(UserDto dto) {
+        UserEntity userEntity = new UserEntity();
+        userEntity.setFirstName(dto.getFirstName());
+        userEntity.setLastName(dto.getLastName());
+        userEntity.setUsername(dto.getUsername());
+        userEntity.setCity(dto.getCity());
+        userEntity.setBalance(dto.getBalance());
+        return userEntity;
     }
 }

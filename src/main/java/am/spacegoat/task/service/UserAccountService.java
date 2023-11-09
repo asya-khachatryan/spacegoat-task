@@ -7,7 +7,13 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public interface UserAccountService {
-    void transfer(long senderId, long receiverId, BigDecimal amount);
+    void transferRepeatableRead(long senderId, long receiverId, BigDecimal amount);
+
+    void transferReadCommitted(long senderId, long receiverId, BigDecimal amount);
+
+    void transferReadUncommitted(long senderId, long receiverId, BigDecimal amount);
+
+    void transferReadUncommittedWithSleep(long senderId, long receiverId, BigDecimal amount) throws InterruptedException;
 
     BigDecimal getBalance(long userId);
 

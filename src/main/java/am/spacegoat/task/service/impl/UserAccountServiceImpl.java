@@ -1,7 +1,7 @@
 package am.spacegoat.task.service.impl;
 
 import am.spacegoat.task.domain.Transaction;
-import am.spacegoat.task.domain.User;
+import am.spacegoat.task.domain.UserEntity;
 import am.spacegoat.task.dto.TransactionDto;
 import am.spacegoat.task.dto.UserDto;
 import am.spacegoat.task.exception.InsufficientFundsException;
@@ -34,14 +34,30 @@ public class UserAccountServiceImpl implements UserAccountService {
 
     @Override
     @Transactional(isolation = Isolation.REPEATABLE_READ)
-    public void transfer(long senderId, long receiverId, BigDecimal amount) {
-        User sender = userRepository.findById(senderId).
-                orElseThrow(() -> new ResourceNotFoundException(User.class, "Id", String.valueOf(senderId)));
+    public void transferRepeatableRead(long senderId, long receiverId, BigDecimal amount) {
+        transfer(senderId, receiverId, amount);
+    }
+
+    @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void transferReadCommitted(long senderId, long receiverId, BigDecimal amount) {
+        transfer(senderId, receiverId, amount);
+    }
+
+    @Override
+    @Transactional(isolation = Isolation.READ_UNCOMMITTED)
+    public void transferReadUncommitted(long senderId, long receiverId, BigDecimal amount) {
+        transfer(senderId, receiverId, amount);
+    }
+
+    private void transferWithPotentialDeadlock(long senderId, long receiverId, BigDecimal amount) {
+        UserEntity sender = userRepository.findById(senderId).
+                orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(senderId)));
         if (sender.getBalance().compareTo(amount) < 0) {
             throw new InsufficientFundsException("Not enough funds");
         }
-        User receiver = userRepository.findById(receiverId).
-                orElseThrow(() -> new ResourceNotFoundException(User.class, "Id", String.valueOf(receiverId)));
+        UserEntity receiver = userRepository.findById(receiverId).
+                orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(receiverId)));
 
         sender.setBalance(sender.getBalance().subtract(amount));
         receiver.setBalance(receiver.getBalance().add(amount));
@@ -50,32 +66,97 @@ public class UserAccountServiceImpl implements UserAccountService {
         userRepository.save(receiver);
 
         Transaction transaction = new Transaction();
-        transaction.setSenderUser(sender);
-        transaction.setReceiverUser(receiver);
+        transaction.setSenderUserEntity(sender);
+        transaction.setReceiverUserEntity(receiver);
         transaction.setAmount(amount);
         transactionRepository.save(transaction);
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_UNCOMMITTED)
+    public void transferReadUncommittedWithSleep(long senderId, long receiverId, BigDecimal amount) throws InterruptedException {
+        UserEntity sender = userRepository.findById(senderId).
+                orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(senderId)));
+        if (sender.getBalance().compareTo(amount) < 0) {
+            throw new InsufficientFundsException("Not enough funds");
+        }
+        UserEntity receiver = userRepository.findById(receiverId).
+                orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(receiverId)));
+
+        sender.setBalance(sender.getBalance().subtract(amount));
+        receiver.setBalance(receiver.getBalance().add(amount));
+
+        userRepository.saveAndFlush(sender);
+        userRepository.saveAndFlush(receiver);
+
+        Thread.sleep(2000);
+
+        Transaction transaction = new Transaction();
+        transaction.setSenderUserEntity(sender);
+        transaction.setReceiverUserEntity(receiver);
+        transaction.setAmount(amount);
+        transactionRepository.save(transaction);
+    }
+
+    private void transfer(long senderId, long receiverId, BigDecimal amount) {
+
+//        if (sender.getBalance().compareTo(amount) < 0) {
+//            throw new InsufficientFundsException("Not enough funds");
+//        }
+
+        if (senderId < receiverId) {
+            UserEntity sender = userRepository.findById(senderId).
+                    orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(senderId)));
+            sender.setBalance(sender.getBalance().subtract(amount));
+            userRepository.saveAndFlush(sender);
+            UserEntity receiver = userRepository.findById(receiverId).
+                    orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(receiverId)));
+            receiver.setBalance(receiver.getBalance().add(amount));
+            userRepository.saveAndFlush(receiver);
+
+            Transaction transaction = new Transaction();
+            transaction.setSenderUserEntity(sender);
+            transaction.setReceiverUserEntity(receiver);
+            transaction.setAmount(amount);
+            transactionRepository.save(transaction);
+        } else {
+            UserEntity receiver = userRepository.findById(receiverId).
+                    orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(receiverId)));
+            receiver.setBalance(receiver.getBalance().add(amount));
+            userRepository.saveAndFlush(receiver);
+            UserEntity sender = userRepository.findById(senderId).
+                    orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(senderId)));
+            sender.setBalance(sender.getBalance().subtract(amount));
+            userRepository.saveAndFlush(sender);
+
+            Transaction transaction = new Transaction();
+            transaction.setSenderUserEntity(sender);
+            transaction.setReceiverUserEntity(receiver);
+            transaction.setAmount(amount);
+            transactionRepository.save(transaction);
+        }
+    }
+
+    @Override
+    @Transactional(isolation = Isolation.READ_UNCOMMITTED)
     public BigDecimal getBalance(long userId) {
-        User user = userRepository.findById(userId).
-                orElseThrow(() -> new ResourceNotFoundException(User.class, "Id", String.valueOf(userId)));
-        return user.getBalance();
+        return userRepository.getBalanceByUserId(userId);
     }
 
     @Override
     @Transactional
     public void addFunds(long userId, BigDecimal amount) {
-        User user = userRepository.findById(userId).
-                orElseThrow(() -> new ResourceNotFoundException(User.class, "Id", String.valueOf(userId)));
-        user.setBalance(user.getBalance().add(amount));
-        userRepository.save(user);
+        UserEntity userEntity = userRepository.findById(userId).
+                orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(userId)));
+        userEntity.setBalance(userEntity.getBalance().add(amount));
+        userRepository.save(userEntity);
     }
 
     @Override
     @Transactional
     public List<TransactionDto> getAllTransactionsByUserId(long id) {
+        userRepository.findById(id).
+                orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(id)));
         List<Transaction> transactionList = transactionRepository.findBySenderUserId(id);
         return transactionList.stream().map(Transaction::toDto).collect(Collectors.toList());
     }
@@ -84,9 +165,9 @@ public class UserAccountServiceImpl implements UserAccountService {
     @Transactional
     public List<TransactionDto> getAllTransactionsByUserIdExampleMatcher(long id) {
         Transaction transaction = new Transaction();
-        User user = userRepository.findById(id).
-                orElseThrow(() -> new ResourceNotFoundException(User.class, "Id", String.valueOf(id)));
-        transaction.setSenderUser(user);
+        UserEntity userEntity = userRepository.findById(id).
+                orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(id)));
+        transaction.setSenderUserEntity(userEntity);
         List<Transaction> transactionList = transactionRepository.findAll(
                 Example.of(
                         transaction,
@@ -98,8 +179,8 @@ public class UserAccountServiceImpl implements UserAccountService {
     @Override
     @Transactional
     public UserDto createUser(UserDto dto) {
-        User user = UserDto.toEntity(dto);
-        User savedUser = userRepository.save(user);
-        return User.toDto(savedUser);
+        UserEntity userEntity = UserDto.toEntity(dto);
+        UserEntity savedUserEntity = userRepository.save(userEntity);
+        return UserEntity.toDto(savedUserEntity);
     }
 }

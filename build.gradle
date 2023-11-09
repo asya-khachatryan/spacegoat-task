@@ -33,8 +33,14 @@ dependencies {
     implementation group: 'org.mapstruct', name: 'mapstruct', version: '1.5.5.Final'
     implementation group: 'org.mapstruct', name: 'mapstruct-processor', version: '1.5.5.Final'
     implementation group: 'org.projectlombok', name: 'lombok-mapstruct-binding', version: '0.2.0'
-    // https://mvnrepository.com/artifact/org.flywaydb/flyway-core
     implementation group: 'org.flywaydb', name: 'flyway-core', version: '9.22.3'
+    testImplementation group: 'org.testcontainers', name: 'testcontainers', version: '1.19.1'
+    testImplementation group: 'org.testcontainers', name: 'postgresql', version: '1.19.1'
+    // https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api
+    testImplementation group: 'org.junit.jupiter', name: 'junit-jupiter-api', version: '5.10.1'
+    // https://mvnrepository.com/artifact/org.testcontainers/junit-jupiter
+    testImplementation group: 'org.testcontainers', name: 'junit-jupiter', version: '1.19.1'
+
 
 }
 
