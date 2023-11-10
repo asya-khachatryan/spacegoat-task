@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -98,43 +100,93 @@ public class UserAccountServiceImpl implements UserAccountService {
         transactionRepository.save(transaction);
     }
 
+    /**
+     * Make deterministic updates order by flushing Hibernate session after each update.
+     * Also take a look on <i>hibernate.order_updates</i> which would resolve it automatically, but I'd suggest to be more explicit in these cases.
+     *
+     * @param senderId
+     * @param receiverId
+     * @param amount
+     */
     private void transfer(long senderId, long receiverId, BigDecimal amount) {
+        UserEntity sender = userRepository.findById(senderId).
+                orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(senderId)));
+        UserEntity receiver = userRepository.findById(receiverId).
+                orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(receiverId)));
+        if (senderId < receiverId) {
+            receiver.setBalance(receiver.getBalance().add(amount));
+            //flush needed for deterministic locking
+            userRepository.flush();
+            sender.setBalance(sender.getBalance().subtract(amount));
+        } else {
+            sender.setBalance(sender.getBalance().subtract(amount));
+            userRepository.flush();
+            receiver.setBalance(receiver.getBalance().add(amount));
+        }
 
-//        if (sender.getBalance().compareTo(amount) < 0) {
-//            throw new InsufficientFundsException("Not enough funds");
-//        }
+        Transaction transaction = new Transaction();
+        transaction.setSenderUserEntity(sender);
+        transaction.setReceiverUserEntity(receiver);
+        transaction.setAmount(amount);
+        transactionRepository.save(transaction);
+    }
+
+    /**
+     * Hibernate sorts updates queries by entity arriving in the context(e.g by finding). Too implicit and hard to rely on.
+     *
+     * @param senderId
+     * @param receiverId
+     * @param amount
+     */
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
+    public void transferUpdateOrderBySelection(long senderId, long receiverId, BigDecimal amount) {
+        UserEntity sender;
+        UserEntity receiver;
 
         if (senderId < receiverId) {
-            UserEntity sender = userRepository.findById(senderId).
+            sender = userRepository.findById(senderId).
                     orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(senderId)));
-            sender.setBalance(sender.getBalance().subtract(amount));
-            userRepository.saveAndFlush(sender);
-            UserEntity receiver = userRepository.findById(receiverId).
+            receiver = userRepository.findById(receiverId).
                     orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(receiverId)));
-            receiver.setBalance(receiver.getBalance().add(amount));
-            userRepository.saveAndFlush(receiver);
-
-            Transaction transaction = new Transaction();
-            transaction.setSenderUserEntity(sender);
-            transaction.setReceiverUserEntity(receiver);
-            transaction.setAmount(amount);
-            transactionRepository.save(transaction);
         } else {
-            UserEntity receiver = userRepository.findById(receiverId).
+            receiver = userRepository.findById(receiverId).
                     orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(receiverId)));
-            receiver.setBalance(receiver.getBalance().add(amount));
-            userRepository.saveAndFlush(receiver);
-            UserEntity sender = userRepository.findById(senderId).
+            sender = userRepository.findById(senderId).
                     orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(senderId)));
-            sender.setBalance(sender.getBalance().subtract(amount));
-            userRepository.saveAndFlush(sender);
-
-            Transaction transaction = new Transaction();
-            transaction.setSenderUserEntity(sender);
-            transaction.setReceiverUserEntity(receiver);
-            transaction.setAmount(amount);
-            transactionRepository.save(transaction);
         }
+        receiver.setBalance(receiver.getBalance().add(amount));
+        sender.setBalance(sender.getBalance().subtract(amount));
+
+
+        Transaction transaction = new Transaction();
+        transaction.setSenderUserEntity(sender);
+        transaction.setReceiverUserEntity(receiver);
+        transaction.setAmount(amount);
+        transactionRepository.save(transaction);
+    }
+
+    /**
+     * Use pessimistic lock to avoid deadlocks
+     *
+     * @param senderId
+     * @param receiverId
+     * @param amount
+     */
+
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
+    public void transferMakePessimisticLockDeterministically(long senderId, long receiverId, BigDecimal amount) {
+        Function<Long, Optional<UserEntity>> f1 = senderId > receiverId ? userRepository::findOnePessimistic : userRepository::findById;
+        Function<Long, Optional<UserEntity>> f2 = senderId > receiverId ? userRepository::findById : userRepository::findOnePessimistic;
+        UserEntity sender = f1.apply(senderId).orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(senderId)));
+        UserEntity receiver = f2.apply(receiverId).orElseThrow(() -> new ResourceNotFoundException(UserEntity.class, "Id", String.valueOf(receiverId)));
+        receiver.setBalance(receiver.getBalance().add(amount));
+        sender.setBalance(sender.getBalance().subtract(amount));
+
+        Transaction transaction = new Transaction();
+        transaction.setSenderUserEntity(sender);
+        transaction.setReceiverUserEntity(receiver);
+        transaction.setAmount(amount);
+        transactionRepository.save(transaction);
     }
 
     @Override

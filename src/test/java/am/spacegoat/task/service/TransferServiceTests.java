@@ -1,10 +1,9 @@
 package am.spacegoat.task.service;
 
-import am.spacegoat.task.containers.PostgresTestContainer;
 import am.spacegoat.task.domain.UserEntity;
 import am.spacegoat.task.repository.TransactionRepository;
 import am.spacegoat.task.repository.UserRepository;
-import org.junit.ClassRule;
+import am.spacegoat.task.service.impl.UserAccountServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
@@ -12,14 +11,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.test.context.ContextConfiguration;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.math.BigDecimal;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.List;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,17 +24,25 @@ import static org.junit.jupiter.api.Assertions.*;
 @ContextConfiguration
 public class TransferServiceTests {
 
-   // @ClassRule
+    // @ClassRule
     // public static PostgreSQLContainer<PostgresTestContainer> postgreSQLContainer = PostgresTestContainer.getInstance();
 
     @Autowired
-    private UserAccountService service;
+    private UserAccountServiceImpl service;
 
     @Autowired
     private UserRepository userRepository;
 
     @Autowired
     private TransactionRepository transactionRepository;
+
+    private interface TriConsumer<A, B, C> {
+        void consume(A a, B b, C c);
+    }
+
+    private List<TriConsumer<Long, Long, BigDecimal>> transferFuncs;
+
+    private static AtomicInteger run = new AtomicInteger(0);
 
     private UserEntity user1 = UserEntity.builder()
             .firstName("John")
@@ -72,41 +76,47 @@ public class TransferServiceTests {
         user1 = userRepository.save(user1);
         user2 = userRepository.save(user2);
         user3 = userRepository.save(user3);
+        transferFuncs = List.of(service::transferMakePessimisticLockDeterministically,
+                service::transferUpdateOrderBySelection,
+                service::transferRepeatableRead);
     }
 
-    @RepeatedTest(1)
+    @RepeatedTest(3)
     public void testConcurrentTransferBetweenUsersDeadlocks() throws InterruptedException {
+        //     postgreSQLContainer.start();
+        TriConsumer<Long, Long, BigDecimal> transferFunc = transferFuncs.get(run.getAndIncrement() % transferFuncs.size());
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
         try {
-       //     postgreSQLContainer.start();
-            CountDownLatch startSignal = new CountDownLatch(1);
-            CountDownLatch doneSignal = new CountDownLatch(2);
+            assertThrows(CannotAcquireLockException.class, () -> {
+                CountDownLatch startSignal = new CountDownLatch(1);
 
-            ExecutorService executorService = Executors.newFixedThreadPool(2);
-
-            executorService.execute(() -> {
+                Future<?> first = executorService.submit(() -> {
+                    try {
+                        startSignal.await();
+                        transferFunc.consume(user1.getId(), user2.getId(), new BigDecimal(100));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+                Future<?> second = executorService.submit(() -> {
+                    try {
+                        startSignal.await();
+                        transferFunc.consume(user2.getId(), user1.getId(), new BigDecimal(200));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+                startSignal.countDown();
                 try {
-                    startSignal.await();
-                    service.transferRepeatableRead(user1.getId(), user2.getId(), new BigDecimal(100));
-                    doneSignal.countDown();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                    first.get();
+                    second.get();
+                } catch (ExecutionException ee) {
+                    ee.printStackTrace();
+                    throw ee.getCause();
                 }
             });
-
-            executorService.execute(() -> {
-                try {
-                    startSignal.await();
-                    service.transferRepeatableRead(user2.getId(), user1.getId(), new BigDecimal(200));
-                    doneSignal.countDown();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
-
-            startSignal.countDown();
-            doneSignal.await();
-        } catch (CannotAcquireLockException e) {
-            assertTrue(true, "Test passed with a deadlock exception.");
+        } finally {
+            executorService.shutdown();
         }
     }
 
@@ -114,34 +124,34 @@ public class TransferServiceTests {
 //    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void testConcurrentTransferBetweenUsersReadCommitted() throws InterruptedException {
 //        try {
-         //   postgreSQLContainer.start();
-            CountDownLatch startSignal = new CountDownLatch(1);
-            CountDownLatch doneSignal = new CountDownLatch(2);
+        //   postgreSQLContainer.start();
+        CountDownLatch startSignal = new CountDownLatch(1);
+        CountDownLatch doneSignal = new CountDownLatch(2);
 
-            ExecutorService executorService = Executors.newFixedThreadPool(2);
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
 
-            executorService.execute(() -> {
-                try {
-                    startSignal.await();
-                    service.transferReadCommitted(user1.getId(), user2.getId(), new BigDecimal(100));
-                    doneSignal.countDown();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
+        executorService.execute(() -> {
+            try {
+                startSignal.await();
+                service.transferReadCommitted(user1.getId(), user2.getId(), new BigDecimal(100));
+                doneSignal.countDown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
 
-            executorService.execute(() -> {
-                try {
-                    startSignal.await();
-                    service.transferReadCommitted(user2.getId(), user1.getId(), new BigDecimal(200));
-                    doneSignal.countDown();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
+        executorService.execute(() -> {
+            try {
+                startSignal.await();
+                service.transferReadCommitted(user2.getId(), user1.getId(), new BigDecimal(200));
+                doneSignal.countDown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
 
-            startSignal.countDown();
-            doneSignal.await();
+        startSignal.countDown();
+        doneSignal.await();
 //        } catch (CannotAcquireLockException e) {
 //            assertTrue(true, "Test passed with a deadlock exception.");
 //        }
